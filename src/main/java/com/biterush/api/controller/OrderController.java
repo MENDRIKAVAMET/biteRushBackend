@@ -70,6 +70,14 @@ public class OrderController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/my-orders")
+    public ResponseEntity<List<OrderResponseDTO>> getMyOrders() {
+
+        List<OrderResponseDTO> response = orderService.findMyOrders();
+
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/admin")
     public ResponseEntity<List<OrderResponseDTO>> getAllOrders() {
 

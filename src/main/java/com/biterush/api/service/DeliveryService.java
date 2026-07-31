@@ -24,6 +24,7 @@ public class DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     /*
      * =====================================================
@@ -56,6 +57,12 @@ public class DeliveryService {
         orderRepository.save(order);
 
         Delivery saved = deliveryRepository.save(delivery);
+
+        // Avant : aucune notification envoyée sur ce chemin d'assignation
+        // (seul assignOrderToDeliveryPublic() appelait notifyDeliveryAssigned()).
+        // Même événement métier (assignation d'une livraison à un livreur),
+        // donc même notification, quel que soit le point d'entrée.
+        notifyDeliveryAssigned(saved);
 
         return mapToResponse(saved);
     }
@@ -210,8 +217,14 @@ public class DeliveryService {
         return mapToResponse(saved);
     }
 
+    /**
+     * Stub vide auparavant. Branché sur NotificationService.notifyDeliveryAssigned(),
+     * qui existait déjà (crée une Notification pour le livreur + broadcast WebSocket)
+     * mais n'était jamais appelé depuis ce flux. Réutilise le patron existant plutôt
+     * que d'en inventer un nouveau.
+     */
     private void notifyDeliveryAssigned(Delivery delivery) {
-        // Will be called from RestaurantService if NotificationService available
+        notificationService.notifyDeliveryAssigned(delivery);
     }
 
     /*
@@ -319,16 +332,21 @@ public class DeliveryService {
         Authentication auth =
                 SecurityContextHolder.getContext().getAuthentication();
 
-        Object principal = auth.getPrincipal();
-
-        if (principal instanceof User user) {
-            return user;
+        if (auth == null || auth.getPrincipal() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Utilisateur non authentifié"
+            );
         }
 
-        throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED,
-                "Utilisateur invalide"
-        );
+        // Le principal posé par JwtFilter est l'email (String), pas l'entité User.
+        String email = auth.getName();
+
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Utilisateur invalide"
+                ));
     }
 
     /*

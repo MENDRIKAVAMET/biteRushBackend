@@ -40,6 +40,10 @@ public class Order {
 
     private double total;
 
+    // Frais de livraison calculés par distance (DeliveryFeeService),
+    // fixés au moment de la création de la commande et inclus dans le total.
+    private double deliveryFee;
+
     @Column(unique = true, nullable = false)
     private String cancelToken;
 
@@ -64,9 +68,12 @@ public class Order {
 
         this.total = items.stream()
                 .mapToDouble(OrderItem::getSubtotal)
-                .sum();
+                .sum() + this.deliveryFee;
     }
 
     @OneToOne(mappedBy = "order")
     private Delivery delivery;
+
+    @OneToOne(mappedBy = "order")
+    private Payment payment;
 }

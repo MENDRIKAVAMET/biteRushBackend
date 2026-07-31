@@ -4,6 +4,7 @@ import com.biterush.api.entity.Order;
 import com.biterush.api.entity.User;
 import com.biterush.api.entity.Delivery;
 import com.biterush.api.entity.Role;
+import com.biterush.api.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,8 +22,18 @@ import org.springframework.web.server.ResponseStatusException;
 @Component
 public class BusinessSecurityUtil {
 
+    private final UserRepository userRepository;
+
+    public BusinessSecurityUtil(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
     /**
-     * Get the current authenticated user from security context
+     * Get the current authenticated user from security context.
+     *
+     * IMPORTANT : le principal posé par JwtFilter est l'email (String) du
+     * token JWT, PAS l'entité User — un cast direct échoue systématiquement.
+     * On résout donc l'utilisateur via le repository à partir de cet email.
      */
     public User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -32,16 +43,14 @@ public class BusinessSecurityUtil {
                     "Utilisateur non authentifié"
             );
         }
-        
-        Object principal = auth.getPrincipal();
-        if (principal instanceof User) {
-            return (User) principal;
-        }
-        
-        throw new ResponseStatusException(
-                HttpStatus.UNAUTHORIZED,
-                "Principal invalide"
-        );
+
+        String email = auth.getName();
+
+        return userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Utilisateur invalide"
+                ));
     }
 
     /**

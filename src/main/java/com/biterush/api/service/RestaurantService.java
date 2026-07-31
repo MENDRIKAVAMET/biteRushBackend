@@ -5,6 +5,7 @@ import com.biterush.api.dto.OrderResponseDTO;
 import com.biterush.api.dto.DeliveryResponseDTO;
 import com.biterush.api.entity.*;
 import com.biterush.api.repository.OrderRepository;
+import com.biterush.api.repository.RestaurantStaffRepository;
 import com.biterush.api.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -29,66 +29,67 @@ public class RestaurantService {
     private final DeliveryService deliveryService;
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final RestaurantStaffRepository restaurantStaffRepository;
 
     /*
      * =========================================================
-     * DASHBOARD
+     * DASHBOARD (scoped au restaurant du staff connecté ; ADMIN voit tout)
      * =========================================================
      */
 
     public RestaurantDashboardDTO getDashboard() {
 
-        List<Order> pending = orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.EN_ATTENTE);
-        List<Order> preparing = orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.EN_PREPARATION);
-        List<Order> ready = orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.PRETE);
+        Long restaurantId = getCurrentStaffRestaurantId();
+
+        List<Order> pending = findByStatus(OrderStatus.EN_ATTENTE, restaurantId);
+        List<Order> preparing = findByStatus(OrderStatus.EN_PREPARATION, restaurantId);
+        List<Order> ready = findByStatus(OrderStatus.PRETE, restaurantId);
 
         RestaurantDashboardDTO dto = new RestaurantDashboardDTO();
         dto.pendingCount = pending.size();
         dto.preparingCount = preparing.size();
         dto.readyCount = ready.size();
 
-        OrderService orderSvc = orderService;
-        dto.pending = pending.stream()
-                .map(orderSvc::mapToResponsePublic)
-                .toList();
-        dto.preparing = preparing.stream()
-                .map(orderSvc::mapToResponsePublic)
-                .toList();
-        dto.ready = ready.stream()
-                .map(orderSvc::mapToResponsePublic)
-                .toList();
+        dto.pending = pending.stream().map(orderService::mapToResponsePublic).toList();
+        dto.preparing = preparing.stream().map(orderService::mapToResponsePublic).toList();
+        dto.ready = ready.stream().map(orderService::mapToResponsePublic).toList();
 
         return dto;
     }
 
     /*
      * =========================================================
-     * GET ORDERS BY STATUS
+     * GET ORDERS BY STATUS (scoped au restaurant du staff connecté)
      * =========================================================
      */
 
     public List<OrderResponseDTO> getPendingOrders() {
-
-        return orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.EN_ATTENTE)
+        return findByStatus(OrderStatus.EN_ATTENTE, getCurrentStaffRestaurantId())
                 .stream()
-                .map(o -> orderService.mapToResponsePublic(o))
+                .map(orderService::mapToResponsePublic)
                 .toList();
     }
 
     public List<OrderResponseDTO> getPreparingOrders() {
-
-        return orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.EN_PREPARATION)
+        return findByStatus(OrderStatus.EN_PREPARATION, getCurrentStaffRestaurantId())
                 .stream()
-                .map(o -> orderService.mapToResponsePublic(o))
+                .map(orderService::mapToResponsePublic)
                 .toList();
     }
 
     public List<OrderResponseDTO> getReadyOrders() {
-
-        return orderRepository.findByStatusOrderByCreateAtDesc(OrderStatus.PRETE)
+        return findByStatus(OrderStatus.PRETE, getCurrentStaffRestaurantId())
                 .stream()
-                .map(o -> orderService.mapToResponsePublic(o))
+                .map(orderService::mapToResponsePublic)
                 .toList();
+    }
+
+    private List<Order> findByStatus(OrderStatus status, Long restaurantId) {
+        // restaurantId == null signifie ADMIN : pas de filtre, vue globale
+        if (restaurantId == null) {
+            return orderRepository.findByStatusOrderByCreateAtDesc(status);
+        }
+        return orderRepository.findByStatusAndRestaurant_IdOrderByCreateAtDesc(status, restaurantId);
     }
 
     /*
@@ -99,9 +100,10 @@ public class RestaurantService {
 
     public void acceptOrder(Long orderId) {
 
-        validateRestaurantStaff();
+        Long staffRestaurantId = getCurrentStaffRestaurantId();
 
         Order order = getOrder(orderId);
+        verifyOrderBelongsToStaffRestaurant(order, staffRestaurantId);
 
         if (order.getStatus() != OrderStatus.EN_ATTENTE) {
             throw new ResponseStatusException(
@@ -124,9 +126,10 @@ public class RestaurantService {
 
     public void startPreparing(Long orderId) {
 
-        validateRestaurantStaff();
+        Long staffRestaurantId = getCurrentStaffRestaurantId();
 
         Order order = getOrder(orderId);
+        verifyOrderBelongsToStaffRestaurant(order, staffRestaurantId);
 
         if (order.getStatus() != OrderStatus.CONFIRMEE) {
             throw new ResponseStatusException(
@@ -149,9 +152,10 @@ public class RestaurantService {
 
     public void markOrderReady(Long orderId) {
 
-        validateRestaurantStaff();
+        Long staffRestaurantId = getCurrentStaffRestaurantId();
 
         Order order = getOrder(orderId);
+        verifyOrderBelongsToStaffRestaurant(order, staffRestaurantId);
 
         if (order.getStatus() != OrderStatus.EN_PREPARATION) {
             throw new ResponseStatusException(
@@ -174,9 +178,10 @@ public class RestaurantService {
 
     public DeliveryResponseDTO assignToDelivery(Long orderId, Long livreurId) {
 
-        validateRestaurantStaff();
+        Long staffRestaurantId = getCurrentStaffRestaurantId();
 
         Order order = getOrder(orderId);
+        verifyOrderBelongsToStaffRestaurant(order, staffRestaurantId);
 
         if (order.getStatus() != OrderStatus.PRETE) {
             throw new ResponseStatusException(
@@ -202,11 +207,13 @@ public class RestaurantService {
     }
 
     public void rejectOrder(Long orderId, String reason) {
-        validateRestaurantStaff();
+
+        Long staffRestaurantId = getCurrentStaffRestaurantId();
 
         Order order = getOrder(orderId);
+        verifyOrderBelongsToStaffRestaurant(order, staffRestaurantId);
 
-        if (order.getStatus() != OrderStatus.EN_ATTENTE && 
+        if (order.getStatus() != OrderStatus.EN_ATTENTE &&
             order.getStatus() != OrderStatus.CONFIRMEE) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -235,7 +242,15 @@ public class RestaurantService {
                 ));
     }
 
-    private void validateRestaurantStaff() {
+    /**
+     * Résout le restaurant du staff actuellement connecté.
+     *
+     * @return l'ID du restaurant du staff, ou {@code null} si l'appelant est ADMIN
+     *         (l'ADMIN n'est pas scoped à un restaurant précis).
+     * @throws ResponseStatusException si l'appelant n'est ni ADMIN ni RESTAURANT_STAFF,
+     *         ou si un RESTAURANT_STAFF authentifié n'a pas (ou plus) de profil staff.
+     */
+    private Long getCurrentStaffRestaurantId() {
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
@@ -246,6 +261,14 @@ public class RestaurantService {
             );
         }
 
+        boolean isAdmin = auth.getAuthorities()
+                .stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+
+        if (isAdmin) {
+            return null;
+        }
+
         boolean isStaff = auth.getAuthorities()
                 .stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_RESTAURANT_STAFF"));
@@ -254,6 +277,43 @@ public class RestaurantService {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "Accès refusé - Staff restaurant requis"
+            );
+        }
+
+        User currentUser = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Utilisateur invalide"
+                ));
+
+        // RestaurantStaff partage sa clé primaire avec User (@MapsId)
+        RestaurantStaff staff = restaurantStaffRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "Aucun profil staff restaurant associé à ce compte"
+                ));
+
+        return staff.getRestaurantId();
+    }
+
+    /**
+     * Empêche un staff du restaurant A d'agir sur les commandes du restaurant B.
+     * Sans cette vérification, n'importe quel RESTAURANT_STAFF pouvait accepter,
+     * préparer, rejeter ou assigner un livreur sur la commande de n'importe quel
+     * autre restaurant en devinant simplement l'ID de la commande.
+     */
+    private void verifyOrderBelongsToStaffRestaurant(Order order, Long staffRestaurantId) {
+
+        if (staffRestaurantId == null) {
+            // ADMIN : pas de restriction
+            return;
+        }
+
+        if (order.getRestaurant() == null
+                || !order.getRestaurant().getId().equals(staffRestaurantId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Cette commande n'appartient pas à votre restaurant"
             );
         }
     }

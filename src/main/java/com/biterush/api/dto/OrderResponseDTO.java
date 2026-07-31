@@ -11,6 +11,8 @@ public class OrderResponseDTO {
     public String phone;
     public String address;
     public double total;
+    public double deliveryFee;
+    public Long restaurantId;
     public OrderStatus status;
     public LocalDateTime createAt;
     public List<OrderItemResponseDTO> items;

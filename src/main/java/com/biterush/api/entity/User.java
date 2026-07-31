@@ -35,4 +35,9 @@ public class User {
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<Order> orders;
+
+    // Flow "mot de passe oublié" (ddl-auto=update, pas de migration à écrire)
+    private String resetPasswordToken;
+
+    private java.time.LocalDateTime resetPasswordTokenExpiry;
 }

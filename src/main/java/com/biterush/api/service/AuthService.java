@@ -3,13 +3,18 @@ package com.biterush.api.service;
 import com.biterush.api.dto.*;
 import com.biterush.api.entity.Client;
 import com.biterush.api.entity.DeliveryPerson;
+import com.biterush.api.entity.Restaurant;
+import com.biterush.api.entity.RestaurantStaff;
 import com.biterush.api.entity.Role;
 import com.biterush.api.entity.User;
 import com.biterush.api.repository.ClientRepository;
 import com.biterush.api.repository.DeliveryPersonRepository;
+import com.biterush.api.repository.RestaurantRepository;
 import com.biterush.api.repository.RestaurantStaffRepository;
 import com.biterush.api.repository.UserRepository;
 import com.biterush.api.security.JwtService;
+
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -18,6 +23,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
+
+@Slf4j
 @Service
 public class AuthService {
 
@@ -25,6 +35,7 @@ public class AuthService {
     private final ClientRepository clientRepository;
     private final DeliveryPersonRepository deliveryPersonRepository;
     private final RestaurantStaffRepository restaurantStaffRepository;
+    private final RestaurantRepository restaurantRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
@@ -32,6 +43,7 @@ public class AuthService {
                        ClientRepository clientRepository,
                        DeliveryPersonRepository deliveryPersonRepository,
                        RestaurantStaffRepository restaurantStaffRepository,
+                       RestaurantRepository restaurantRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService) {
 
@@ -39,13 +51,14 @@ public class AuthService {
         this.clientRepository = clientRepository;
         this.deliveryPersonRepository = deliveryPersonRepository;
         this.restaurantStaffRepository = restaurantStaffRepository;
+        this.restaurantRepository = restaurantRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
     }
 
     public UserResponseDTO register(RegisterRequestDTO dto) {
 
-        if(dto.address == null || dto.address.isBlank()){
+        if(dto.role == Role.CLIENT && (dto.address == null || dto.address.isBlank())){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Address required");
         }
         if(userRepository.existsByEmail(dto.email)){
@@ -75,6 +88,21 @@ public class AuthService {
             delivery.setZone(dto.zone);
 
             deliveryPersonRepository.save(delivery);
+        }
+
+        if(dto.role == Role.RESTAURANT_STAFF){
+            if(dto.restaurantId == null){
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "restaurantId is required for RESTAURANT_STAFF");
+            }
+
+            Restaurant restaurant = restaurantRepository.findById(dto.restaurantId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Restaurant introuvable"));
+
+            RestaurantStaff staff = new RestaurantStaff();
+            staff.setUser(user);
+            staff.setRestaurantId(restaurant.getId());
+
+            restaurantStaffRepository.save(staff);
         }
 
         return mapToResponse(saved);
@@ -112,6 +140,82 @@ public class AuthService {
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Token refresh failed: " + e.getMessage());
         }
+    }
+
+    /*
+     * =========================================================
+     * MOT DE PASSE OUBLIÉ
+     * =========================================================
+     * Décision de conception, faute de spécification : `spring-boot-starter-mail`
+     * est absent du pom.xml (signalé dans le CHANGELOG depuis plusieurs sessions) et
+     * pas d'accès Maven Central confirmé pour l'ajouter et vérifier qu'il compile.
+     * L'envoi d'email est donc MOCKÉ : le lien de réinitialisation est journalisé
+     * (log) au lieu d'être envoyé, exactement comme PaymentController/PaymentService
+     * documentent déjà leurs paiements comme "MOCK, aucune vraie passerelle n'est
+     * appelée" - même patron, même honnêteté sur ce qui est simulé.
+     */
+
+    public void forgotPassword(ForgotPasswordRequestDTO dto) {
+
+        // Ne JAMAIS révéler si l'email existe ou non (protection contre
+        // l'énumération de comptes) : on répond silencieusement (void, 204 côté
+        // contrôleur) que l'utilisateur existe ou pas.
+        userRepository.findByEmail(dto.email).ifPresent(user -> {
+
+            String token = generateSecureToken();
+
+            user.setResetPasswordToken(token);
+            user.setResetPasswordTokenExpiry(LocalDateTime.now().plusHours(1));
+
+            userRepository.save(user);
+
+            // MOCK : à remplacer par un vrai envoi d'email une fois
+            // spring-boot-starter-mail ajouté au pom.xml. Le lien contient le token
+            // en clair dans les logs uniquement - ne jamais renvoyer le token dans la
+            // réponse HTTP.
+            log.info(
+                    "[MOCK EMAIL] Lien de réinitialisation pour {} : /auth/reset-password?token={} (expire dans 1h)",
+                    user.getEmail(),
+                    token
+            );
+        });
+    }
+
+    public void resetPassword(ResetPasswordRequestDTO dto) {
+
+        User user = userRepository.findByResetPasswordToken(dto.token)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Token invalide ou expiré"
+                ));
+
+        if (user.getResetPasswordTokenExpiry() == null
+                || user.getResetPasswordTokenExpiry().isBefore(LocalDateTime.now())) {
+
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Token invalide ou expiré"
+            );
+        }
+
+        user.setPassword(passwordEncoder.encode(dto.newPassword));
+        user.setResetPasswordToken(null);
+        user.setResetPasswordTokenExpiry(null);
+
+        userRepository.save(user);
+    }
+
+    private String generateSecureToken() {
+
+        SecureRandom random = new SecureRandom();
+
+        byte[] bytes = new byte[32];
+
+        random.nextBytes(bytes);
+
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(bytes);
     }
 
     public UserResponseDTO getCurrentUser(String email) {

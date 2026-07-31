@@ -142,6 +142,20 @@ public class NotificationService {
      * =========================================================
      */
 
+    /**
+     * Récupère l'entité Notification (usage interne, pour vérification de
+     * propriétaire côté contrôleur avant markAsRead/delete).
+     */
+    @Transactional(readOnly = true)
+    public Notification getNotificationEntity(Long notificationId) {
+
+        return notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Notification introuvable"
+                ));
+    }
+
     public void markAsRead(Long notificationId) {
 
         Notification notification = notificationRepository.findById(notificationId)

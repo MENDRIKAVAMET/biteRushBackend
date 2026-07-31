@@ -1,11 +1,15 @@
 package com.biterush.api.controller;
 
 import com.biterush.api.dto.NotificationDTO;
+import com.biterush.api.entity.Notification;
+import com.biterush.api.entity.User;
+import com.biterush.api.security.BusinessSecurityUtil;
 import com.biterush.api.service.NotificationService;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +27,7 @@ public class NotificationController {
 
     private final NotificationService notificationService;
     private final UserRepository userRepository;
+    private final BusinessSecurityUtil businessSecurity;
 
     @GetMapping
     public ResponseEntity<List<NotificationDTO>> getMyNotifications() {
@@ -54,6 +59,8 @@ public class NotificationController {
     @PatchMapping("/{id}/read")
     public ResponseEntity<Void> markAsRead(@PathVariable Long id) {
 
+        verifyOwner(notificationService.getNotificationEntity(id));
+
         notificationService.markAsRead(id);
 
         return ResponseEntity.noContent().build();
@@ -71,9 +78,30 @@ public class NotificationController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteNotification(@PathVariable Long id) {
 
+        verifyOwner(notificationService.getNotificationEntity(id));
+
         notificationService.deleteNotification(id);
 
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Un utilisateur ne peut marquer comme lue / supprimer que ses propres
+     * notifications. ADMIN non restreint. Même patron que
+     * AddressController.verifyOwner() / ClientController.verifyOwner().
+     * (Avant : markAsRead/deleteNotification n'importe quel utilisateur
+     * authentifié pouvait agir sur la notification de n'importe qui.)
+     */
+    private void verifyOwner(Notification notification) {
+        User currentUser = businessSecurity.getCurrentUser();
+
+        if (businessSecurity.isAdmin(currentUser)) {
+            return;
+        }
+
+        if (!notification.getRecipient().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Vous n'avez pas accès à cette notification");
+        }
     }
 
     private Long getCurrentUserId() {

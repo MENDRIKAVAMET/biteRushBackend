@@ -2,6 +2,8 @@ package com.biterush.api.controller;
 
 import com.biterush.api.dto.NotificationDTO;
 import com.biterush.api.dto.SubscriptionMessage;
+import com.biterush.api.entity.User;
+import com.biterush.api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 public class WebSocketController {
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserRepository userRepository;
 
     @MessageMapping("/notifications/subscribe")
     public void subscribe(SubscriptionMessage message, SimpMessageHeaderAccessor headerAccessor) {
@@ -119,9 +122,14 @@ public class WebSocketController {
 
     private Long getCurrentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof com.biterush.api.entity.User user) {
-            return user.getId();
+        if (auth == null || auth.getName() == null) {
+            throw new RuntimeException("User not authenticated");
         }
-        throw new RuntimeException("User not authenticated");
+
+        // Le principal est l'email (String) posé par JwtFilter, pas l'entité User.
+        User user = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new RuntimeException("User not authenticated"));
+
+        return user.getId();
     }
 }

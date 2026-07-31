@@ -34,6 +34,12 @@ public class Restaurant {
 
     private Integer deliveryTime;
 
+    // Coordonnées GPS optionnelles : servent au calcul des frais de
+    // livraison par distance (DeliveryFeeService). Absentes = fallback
+    // sur un tarif forfaitaire par défaut, pas d'échec de commande.
+    private Double latitude;
+    private Double longitude;
+
     @Column(nullable = false)
     private boolean active = true;
 
