@@ -128,6 +128,53 @@ public class OrderService {
 
     /*
      * =========================================================
+     * ADMIN - GRAPHIQUE DES COMMANDES (30 derniers jours)
+     * =========================================================
+     * Agrégation en mémoire (nombre de commandes + chiffre d'affaires par
+     * jour), pas de requête JPQL dédiée : le volume de commandes de ce
+     * projet ne justifie pas une agrégation SQL, et ça évite d'introduire
+     * une requête non testable dans ce sandbox (pas d'accès DB ici).
+     * Les commandes ANNULEE sont comptées dans orderCount mais exclues du
+     * revenue (elles n'ont jamais généré de chiffre d'affaires réel).
+     */
+    @Transactional(readOnly = true)
+    public List<OrderChartPointDTO> getAdminOrdersChart() {
+
+        validateAdmin();
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate startDate = today.minusDays(29);
+
+        Map<java.time.LocalDate, OrderChartPointDTO> byDate = new java.util.LinkedHashMap<>();
+        for (java.time.LocalDate d = startDate; !d.isAfter(today); d = d.plusDays(1)) {
+            OrderChartPointDTO point = new OrderChartPointDTO();
+            point.date = d;
+            point.orderCount = 0;
+            point.revenue = 0;
+            byDate.put(d, point);
+        }
+
+        List<Order> orders = orderRepository.findAll();
+
+        for (Order order : orders) {
+            if (order.getCreateAt() == null) continue;
+
+            java.time.LocalDate orderDate = order.getCreateAt().toLocalDate();
+
+            OrderChartPointDTO point = byDate.get(orderDate);
+            if (point == null) continue; // hors fenêtre des 30 derniers jours
+
+            point.orderCount += 1;
+            if (order.getStatus() != OrderStatus.ANNULEE) {
+                point.revenue += order.getTotal();
+            }
+        }
+
+        return new java.util.ArrayList<>(byDate.values());
+    }
+
+    /*
+     * =========================================================
      * UPDATE
      * =========================================================
      */

@@ -23,4 +23,9 @@ public class DeliveryPerson {
     private String zone;
 
     private String vehicule;
+
+    // Disponibilité déclarée par le livreur lui-même (n'affecte pas
+    // l'assignation automatique, qui n'existe pas encore côté service —
+    // sert uniquement à afficher/filtrer côté frontend pour l'instant).
+    private boolean available = true;
 }

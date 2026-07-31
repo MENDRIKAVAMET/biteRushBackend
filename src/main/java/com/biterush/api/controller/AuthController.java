@@ -58,6 +58,17 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/change-password")
+    public ResponseEntity<Void> changePassword(
+            @Valid @RequestBody com.biterush.api.dto.ChangePasswordDTO dto
+    ) {
+        // SecurityConfig impose authenticated() sur cette route précise, donc
+        // auth.getName() est garanti non-null ici (sinon 401/403 avant d'arriver).
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        authService.changePassword(auth.getName(), dto);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponseDTO> refresh(@RequestParam String refreshToken) {
         return ResponseEntity.ok(authService.refreshToken(refreshToken));

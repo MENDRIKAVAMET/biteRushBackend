@@ -811,3 +811,43 @@ de votre côté pour valider avant de merger.
   de changer `address`... en fait si (`updateBasicInformation`), donc un
   changement d'adresse en `EN_ATTENTE` laissera les frais de livraison
   d'origine. À corriger si ce cas d'usage est jugé important.
+
+## Compléments : change-password, profil/disponibilité livreur, chart admin
+
+### `POST /auth/change-password`
+- Branché sur `ChangePasswordDTO` (déjà présent mais orphelin, jamais utilisé).
+- `AuthService.changePassword()` : vérifie l'ancien mot de passe, encode le nouveau.
+- `SecurityConfig` : règle `authenticated()` ajoutée spécifiquement sur
+  `/auth/change-password`, placée AVANT la règle générale `/auth/**` (`permitAll()`)
+  pour qu'elle prenne le dessus.
+
+### Profil et disponibilité livreur
+- `entity/DeliveryPerson.java` : ajout du champ `available` (défaut `true`).
+- `repository/DeliveryPersonRepository.java` : ajout de `findByUser_Id()`.
+- Nouveaux DTOs : `DeliveryPersonProfileDTO` (adapté depuis un fichier déjà présent
+  mais orphelin), `DeliveryPersonUpdateDTO`, `AvailabilityUpdateDTO`.
+- `DeliveryService` : `getProfile()`, `updateProfile()`, `setAvailability()`.
+- `DeliveryController` : `GET /api/deliveries/profile`, `PUT /api/deliveries/profile`,
+  `PATCH /api/deliveries/availability`.
+- `PATCH /api/deliveries/{id}/accept` : ajouté comme alias métier de `/start`
+  (même transition ASSIGNED -> IN_PROGRESS), pour matcher le vocabulaire frontend.
+- Sécurité : ces routes tombent sous la règle déjà existante
+  `hasAnyRole("LIVREUR", "ADMIN")` sur `/api/deliveries/**`, pas de nouvelle règle
+  nécessaire.
+
+### `GET /orders/admin/chart`
+- `dto/OrderChartPointDTO.java` : point de donnée `{date, orderCount, revenue}`.
+- `OrderService.getAdminOrdersChart()` : agrégation en mémoire sur les 30 derniers
+  jours (pas de requête JPQL dédiée, volume du projet ne le justifie pas et évite
+  d'introduire une requête non testable dans ce sandbox). Les commandes `ANNULEE`
+  sont comptées dans `orderCount` mais exclues du `revenue`.
+- Protégé par `validateAdmin()` en interne (même pattern que `findAll()`), bien que
+  la règle HTTP `GET /orders/**` autorise aussi CLIENT/LIVREUR au niveau filtre —
+  cohérent avec le reste du contrôle d'accès de ce contrôleur.
+
+## État à date (backend, frontend mis à part)
+Tous les points de la liste "reste à faire" de la session précédente sont maintenant
+traités : rate limiting login, mot de passe oublié, frais de livraison par distance,
+rôle RESTAURANT_STAFF, module paiement, endpoints manquants (my-orders, change-password,
+profil/disponibilité livreur, chart admin), faille /users+/notifications, notification
+de livraison branchée.

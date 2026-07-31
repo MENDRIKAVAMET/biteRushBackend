@@ -218,6 +218,29 @@ public class AuthService {
                 .encodeToString(bytes);
     }
 
+    /*
+     * =========================================================
+     * CHANGEMENT DE MOT DE PASSE (utilisateur connecté)
+     * =========================================================
+     */
+    public void changePassword(String email, ChangePasswordDTO dto) {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "User not found"
+                ));
+
+        if (!passwordEncoder.matches(dto.currentPassword, user.getPassword())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Ancien mot de passe incorrect"
+            );
+        }
+
+        user.setPassword(passwordEncoder.encode(dto.newPassword));
+        userRepository.save(user);
+    }
+
     public UserResponseDTO getCurrentUser(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));

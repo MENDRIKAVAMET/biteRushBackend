@@ -25,6 +25,7 @@ public class DeliveryService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final com.biterush.api.repository.DeliveryPersonRepository deliveryPersonRepository;
 
     /*
      * =====================================================
@@ -182,6 +183,75 @@ public class DeliveryService {
         orderRepository.save(order);
 
         return mapToResponse(deliveryRepository.save(delivery));
+    }
+
+    /*
+     * =====================================================
+     * LIVREUR - PROFIL (GET/PUT /api/deliveries/profile)
+     * =====================================================
+     */
+    public com.biterush.api.dto.DeliveryPersonProfileDTO getProfile() {
+
+        User current = getCurrentUser();
+
+        com.biterush.api.entity.DeliveryPerson person = getDeliveryPersonForCurrentUser(current);
+
+        return mapToProfileResponse(person);
+    }
+
+    public com.biterush.api.dto.DeliveryPersonProfileDTO updateProfile(
+            com.biterush.api.dto.DeliveryPersonUpdateDTO dto) {
+
+        User current = getCurrentUser();
+
+        com.biterush.api.entity.DeliveryPerson person = getDeliveryPersonForCurrentUser(current);
+
+        person.setZone(dto.zone.trim());
+        person.setVehicule(dto.vehicule.trim());
+
+        return mapToProfileResponse(deliveryPersonRepository.save(person));
+    }
+
+    /*
+     * =====================================================
+     * LIVREUR - DISPONIBILITÉ (PATCH /api/deliveries/availability)
+     * =====================================================
+     */
+    public com.biterush.api.dto.DeliveryPersonProfileDTO setAvailability(
+            com.biterush.api.dto.AvailabilityUpdateDTO dto) {
+
+        User current = getCurrentUser();
+
+        com.biterush.api.entity.DeliveryPerson person = getDeliveryPersonForCurrentUser(current);
+
+        person.setAvailable(dto.available);
+
+        return mapToProfileResponse(deliveryPersonRepository.save(person));
+    }
+
+    private com.biterush.api.entity.DeliveryPerson getDeliveryPersonForCurrentUser(User current) {
+        return deliveryPersonRepository.findByUser_Id(current.getId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Profil livreur introuvable pour cet utilisateur"
+                ));
+    }
+
+    private com.biterush.api.dto.DeliveryPersonProfileDTO mapToProfileResponse(
+            com.biterush.api.entity.DeliveryPerson person) {
+
+        com.biterush.api.dto.DeliveryPersonProfileDTO dto =
+                new com.biterush.api.dto.DeliveryPersonProfileDTO();
+
+        dto.id = person.getId();
+        dto.userId = person.getUser().getId();
+        dto.nom = person.getUser().getNom();
+        dto.email = person.getUser().getEmail();
+        dto.zone = person.getZone();
+        dto.vehicule = person.getVehicule();
+        dto.available = person.isAvailable();
+
+        return dto;
     }
 
     /*

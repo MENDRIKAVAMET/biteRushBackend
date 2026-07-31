@@ -2,6 +2,7 @@ package com.biterush.api.dto;
 
 public class DeliveryPersonProfileDTO {
     public Long id;
+    public Long userId;
     public String nom;
     public String email;
     public String zone;

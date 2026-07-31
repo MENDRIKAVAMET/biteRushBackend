@@ -34,6 +34,9 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> auth
 
+                        // Doit être authentifié (précède la règle générale /auth/**
+                        // ci-dessous, qui elle est permitAll pour login/register/etc.)
+                        .requestMatchers("/auth/change-password").authenticated()
                         .requestMatchers("/auth/**").permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/products/**").permitAll()

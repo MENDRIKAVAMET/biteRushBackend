@@ -87,6 +87,15 @@ public class OrderController {
         return ResponseEntity.ok(response);
     }
 
+    @GetMapping("/admin/chart")
+    public ResponseEntity<List<com.biterush.api.dto.OrderChartPointDTO>> getAdminOrdersChart() {
+
+        List<com.biterush.api.dto.OrderChartPointDTO> response =
+                orderService.getAdminOrdersChart();
+
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/admin/{id}")
     public ResponseEntity<OrderResponseDTO> updateOrder(
             @PathVariable Long id,

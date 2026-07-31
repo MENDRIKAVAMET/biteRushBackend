@@ -41,8 +41,32 @@ public class DeliveryController {
         return deliveryService.getMyDeliveries();
     }
 
+    @GetMapping("/profile")
+    public com.biterush.api.dto.DeliveryPersonProfileDTO getProfile() {
+        return deliveryService.getProfile();
+    }
+
+    @PutMapping("/profile")
+    public com.biterush.api.dto.DeliveryPersonProfileDTO updateProfile(
+            @Valid @RequestBody com.biterush.api.dto.DeliveryPersonUpdateDTO dto) {
+        return deliveryService.updateProfile(dto);
+    }
+
+    @PatchMapping("/availability")
+    public com.biterush.api.dto.DeliveryPersonProfileDTO setAvailability(
+            @Valid @RequestBody com.biterush.api.dto.AvailabilityUpdateDTO dto) {
+        return deliveryService.setAvailability(dto);
+    }
+
     @PatchMapping("/{id}/start")
     public DeliveryResponseDTO start(@PathVariable Long id) {
+        return deliveryService.startDelivery(id);
+    }
+
+    // Alias métier de /start : côté frontend, "accepter" une livraison
+    // assignée est la même action que "démarrer" (transition ASSIGNED -> IN_PROGRESS).
+    @PatchMapping("/{id}/accept")
+    public DeliveryResponseDTO accept(@PathVariable Long id) {
         return deliveryService.startDelivery(id);
     }
 
