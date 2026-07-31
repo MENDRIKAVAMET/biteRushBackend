@@ -1,0 +1,5 @@
+.menu-list { display:flex; flex-direction:column; gap:12px; }
+
+@media (min-width: 768px) {
+  .menu-list { gap:14px; }
+}
