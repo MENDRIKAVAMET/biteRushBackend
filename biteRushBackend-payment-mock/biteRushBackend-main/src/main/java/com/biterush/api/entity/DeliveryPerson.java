@@ -1,0 +1,29 @@
+package com.biterush.api.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "delivery_persons")
+public class DeliveryPerson {
+    @Id
+    private Long id;
+
+    @OneToOne
+    @MapsId
+    private User user;
+
+    private String zone;
+
+    private String vehicule;
+
+    @Column(nullable = false)
+    private boolean available = true;
+}
