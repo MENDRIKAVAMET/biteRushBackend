@@ -24,6 +24,13 @@ public class OrderRequestDTO {
     @jakarta.validation.constraints.NotNull(message = "Le restaurant est obligatoire")
     public Long restaurantId;
 
+    // Optionnelles : coordonnées GPS de l'adresse de livraison, utilisées
+    // par DeliveryFeeService pour calculer les frais par distance. Si absentes
+    // (frontend qui n'envoie pas encore lat/lng), un tarif forfaitaire
+    // par défaut s'applique à la place.
+    public Double latitude;
+    public Double longitude;
+
     @Valid
     @NotEmpty(message = "La commande doit contenir au moins un produit")
     public List<OrderItemDTO> items;

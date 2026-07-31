@@ -39,6 +39,7 @@ public class OrderService {
     private final DeliveryRepository deliveryRepository;
     private final RestaurantRepository restaurantRepository;
     private final UserRepository userRepository;
+    private final DeliveryFeeService deliveryFeeService;
 
     /*
      * =========================================================
@@ -76,6 +77,15 @@ public class OrderService {
         List<OrderItem> items = buildOrderItems(order, dto.items);
 
         order.setItems(items);
+
+        // Frais de livraison calculés par distance (restaurant -> adresse
+        // de livraison). Fixé AVANT calculateTotal() car le total les inclut.
+        double deliveryFee = deliveryFeeService.computeFee(
+                restaurant.getLatitude(), restaurant.getLongitude(),
+                dto.latitude, dto.longitude
+        );
+        order.setDeliveryFee(deliveryFee);
+
         order.calculateTotal();
 
         Order savedOrder = orderRepository.save(order);
@@ -561,6 +571,7 @@ public class OrderService {
         dto.address = order.getAddress();
 
         dto.total = order.getTotal();
+        dto.deliveryFee = order.getDeliveryFee();
         dto.restaurantId = order.getRestaurant() != null ? order.getRestaurant().getId() : null;
         dto.status = order.getStatus();
 

@@ -43,6 +43,8 @@ public class RestaurantController {
         restaurant.setAddress(dto.address);
         restaurant.setPhoneNumber(dto.phoneNumber);
         restaurant.setEmail(dto.email);
+        restaurant.setLatitude(dto.latitude);
+        restaurant.setLongitude(dto.longitude);
 
         Restaurant saved = restaurantRepository.save(restaurant);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -60,6 +62,8 @@ public class RestaurantController {
                 restaurant.setAddress(dto.address);
                 restaurant.setPhoneNumber(dto.phoneNumber);
                 restaurant.setEmail(dto.email);
+                restaurant.setLatitude(dto.latitude);
+                restaurant.setLongitude(dto.longitude);
                 return ResponseEntity.ok(restaurantRepository.save(restaurant));
             })
             .orElseGet(() -> ResponseEntity.notFound().build());

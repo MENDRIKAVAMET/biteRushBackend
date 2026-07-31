@@ -768,3 +768,46 @@ en pratique — à vérifier/valider avec vous avant de trancher.
 Le projet **n'a pas été compilé** dans ce sandbox (pas d'accès réseau vers Maven Central
 pour ce module précis). Lancez `mvn compile` (backend) et `npm run build` (frontend)
 de votre côté pour valider avant de merger.
+
+## Calcul des frais de livraison (par distance)
+
+### Nouveau
+- `service/DeliveryFeeService.java` : calcul par distance réelle (formule de
+  Haversine, aucune dépendance externe) entre les coordonnées GPS du restaurant
+  et celles de l'adresse de livraison. Barème : base + tarif/km, avec plancher
+  et plafond.
+- **Décision de conception** : aucune notion de "zone" n'existe dans le modèle
+  de données actuel (le `zone` de `DeliveryPerson` est la zone de travail du
+  livreur, pas une zone tarifaire) → calcul **par distance**, pas par zone.
+- **Fallback documenté** : si les coordonnées manquent (restaurant pas encore
+  géolocalisé, ou frontend actuel qui n'envoie pas lat/lng), un **tarif
+  forfaitaire par défaut** s'applique plutôt que de faire échouer la commande.
+
+### Modifié
+- `entity/Restaurant.java` : ajout de `latitude`/`longitude` (optionnels).
+- `dto/RestaurantDTO.java` : ajout de `latitude`/`longitude`.
+- `controller/RestaurantController.java` : `latitude`/`longitude` câblés dans
+  `createRestaurant` et `updateRestaurant`.
+- `dto/OrderRequestDTO.java` : ajout de `latitude`/`longitude` optionnels
+  (coordonnées de l'adresse de livraison).
+- `entity/Order.java` : ajout du champ `deliveryFee`, inclus dans
+  `calculateTotal()` (total = somme des sous-totaux + `deliveryFee`).
+- `service/OrderService.java` : `createOrder()` appelle `DeliveryFeeService`
+  avec les coordonnées du restaurant et celles de la requête, fixe
+  `deliveryFee` sur la commande **avant** `calculateTotal()`.
+- `dto/OrderResponseDTO.java` : ajout du champ `deliveryFee`, exposé par
+  `mapToResponse()`.
+
+### Impact sur `PaymentService` (vérifié, pas de changement de code nécessaire)
+- `PaymentService.initiatePayment()` utilise `order.getTotal()` comme montant
+  à facturer, qui inclut déjà `deliveryFee` puisque `calculateTotal()` l'ajoute.
+  Le paiement (mock) facture donc automatiquement les frais de livraison, sans
+  modification requise dans le module paiement.
+
+### Limite connue (non traitée, à signaler)
+- Si l'adresse d'une commande est modifiée après création
+  (`OrderService.updateOrder()`), `deliveryFee` **n'est pas recalculé** : seul
+  `createOrder()` calcule les frais. Actuellement `updateOrder()` ne permet pas
+  de changer `address`... en fait si (`updateBasicInformation`), donc un
+  changement d'adresse en `EN_ATTENTE` laissera les frais de livraison
+  d'origine. À corriger si ce cas d'usage est jugé important.

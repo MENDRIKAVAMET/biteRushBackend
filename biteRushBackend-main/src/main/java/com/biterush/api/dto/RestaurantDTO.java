@@ -33,4 +33,9 @@ public class RestaurantDTO {
     public Double rating;
     public Integer deliveryTime;
     public boolean active;
+
+    // Optionnelles : utilisées par DeliveryFeeService pour le calcul
+    // des frais de livraison par distance.
+    public Double latitude;
+    public Double longitude;
 }
