@@ -21,6 +21,9 @@ public class OrderRequestDTO {
     @Size(max = 255, message = "L'adresse ne doit pas dépasser 255 caractères")
     public String address;
 
+    @jakarta.validation.constraints.NotNull(message = "Le restaurant est obligatoire")
+    public Long restaurantId;
+
     @Valid
     @NotEmpty(message = "La commande doit contenir au moins un produit")
     public List<OrderItemDTO> items;

@@ -27,4 +27,7 @@ public class RegisterRequestDTO {
     // livreur
     public String vehicule;
     public String zone;
+
+    // restaurant_staff — obligatoire uniquement si role == RESTAURANT_STAFF
+    public Long restaurantId;
 }

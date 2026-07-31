@@ -5,6 +5,8 @@ import com.biterush.api.entity.*;
 import com.biterush.api.repository.DeliveryRepository;
 import com.biterush.api.repository.OrderRepository;
 import com.biterush.api.repository.ProductRepository;
+import com.biterush.api.repository.RestaurantRepository;
+import com.biterush.api.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,6 +37,8 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final DeliveryRepository deliveryRepository;
+    private final RestaurantRepository restaurantRepository;
+    private final UserRepository userRepository;
 
     /*
      * =========================================================
@@ -46,11 +50,25 @@ public class OrderService {
 
         validateOrderRequest(dto);
 
+        User currentUser = getCurrentUser();
+
+        Restaurant restaurant = restaurantRepository.findById(dto.restaurantId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Restaurant introuvable"
+                ));
+
         Order order = new Order();
 
         order.setClientName(dto.clientName.trim());
         order.setPhone(dto.phone.trim());
         order.setAddress(dto.address.trim());
+
+        // `user`/`creator` sont NOT NULL en base ; sans ceci, la sauvegarde
+        // échouait systématiquement (violation de contrainte SQL).
+        order.setUser(currentUser);
+        order.setCreator(currentUser);
+        order.setRestaurant(restaurant);
 
         order.setStatus(OrderStatus.EN_ATTENTE);
         order.setCancelToken(generateSecureToken());
@@ -83,6 +101,14 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderResponseDTO> findAll() {
+
+        // Découvert lors de la vérification systématique SecurityConfig <-> service :
+        // cette méthode (utilisée par GET /orders/admin) n'avait AUCUNE vérification
+        // interne, alors que SecurityConfig autorise CLIENT/LIVREUR/ADMIN sur
+        // GET /orders/** — n'importe quel client ou livreur pouvait donc lister TOUTES
+        // les commandes du système. Ajout de validateAdmin() pour que ce endpoint
+        // "admin" soit réellement réservé à l'ADMIN, comme son chemin le laisse penser.
+        validateAdmin();
 
         return orderRepository.findAll()
                 .stream()
@@ -255,6 +281,23 @@ public class OrderService {
      * =========================================================
      */
 
+    /*
+     * =========================================================
+     * PAYMENT (appelé par PaymentService lors d'un paiement réussi)
+     * =========================================================
+     */
+
+    public void confirmOrderAfterPayment(Long orderId) {
+
+        Order order = getOrderById(orderId);
+
+        if (order.getStatus() == OrderStatus.EN_ATTENTE) {
+            order.setStatus(OrderStatus.CONFIRMEE);
+            handleOrderConfirmation(order);
+            orderRepository.save(order);
+        }
+    }
+
     private void handleOrderConfirmation(Order order){
         if(order.getDelivery() == null){
             createFormOrder(order, null);
@@ -396,6 +439,42 @@ public class OrderService {
         }
     }
 
+    private User getCurrentUser() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Utilisateur non authentifié"
+            );
+        }
+
+        return userRepository.findByEmail(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "Utilisateur invalide"
+                ));
+    }
+
+    /*
+     * =========================================================
+     * MES COMMANDES (client connecté)
+     * =========================================================
+     */
+
+    @Transactional(readOnly = true)
+    public List<OrderResponseDTO> findMyOrders() {
+
+        User currentUser = getCurrentUser();
+
+        return orderRepository.findByUser_Id(currentUser.getId())
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
     private void validateAdmin() {
 
         Authentication authentication =
@@ -482,6 +561,7 @@ public class OrderService {
         dto.address = order.getAddress();
 
         dto.total = order.getTotal();
+        dto.restaurantId = order.getRestaurant() != null ? order.getRestaurant().getId() : null;
         dto.status = order.getStatus();
 
         dto.createAt = order.getCreateAt();

@@ -1,8 +1,10 @@
 package com.biterush.api.controller;
 
 import com.biterush.api.dto.AuthResponseDTO;
+import com.biterush.api.dto.ForgotPasswordRequestDTO;
 import com.biterush.api.dto.LoginRequestDTO;
 import com.biterush.api.dto.RegisterRequestDTO;
+import com.biterush.api.dto.ResetPasswordRequestDTO;
 import com.biterush.api.dto.UserResponseDTO;
 import com.biterush.api.service.AuthService;
 
@@ -38,6 +40,24 @@ public class AuthController {
         return authService.login(dto);
     }
     
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequestDTO dto
+    ) {
+        authService.forgotPassword(dto);
+        // 204 dans tous les cas (email existant ou non) - ne jamais révéler si un
+        // compte existe pour l'email donné.
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(
+            @Valid @RequestBody ResetPasswordRequestDTO dto
+    ) {
+        authService.resetPassword(dto);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponseDTO> refresh(@RequestParam String refreshToken) {
         return ResponseEntity.ok(authService.refreshToken(refreshToken));

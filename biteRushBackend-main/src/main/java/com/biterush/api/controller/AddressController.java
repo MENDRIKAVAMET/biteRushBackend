@@ -78,9 +78,12 @@ public class AddressController {
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<Address> getAddress(@PathVariable Long id) {
-        return addressRepository.findById(id)
-            .map(ResponseEntity::ok)
+        Address address = addressRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
+
+        verifyOwner(address);
+
+        return ResponseEntity.ok(address);
     }
 
     @PutMapping("/{id}")
@@ -91,6 +94,8 @@ public class AddressController {
 
         Address address = addressRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
+
+        verifyOwner(address);
 
         address.setStreet(dto.street);
         address.setCity(dto.city);
@@ -107,10 +112,29 @@ public class AddressController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('CLIENT')")
     public ResponseEntity<Void> deleteAddress(@PathVariable Long id) {
-        if (addressRepository.existsById(id)) {
-            addressRepository.deleteById(id);
-            return ResponseEntity.noContent().build();
+        Address address = addressRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Address not found"));
+
+        verifyOwner(address);
+
+        addressRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Un client ne peut lire/modifier/supprimer que ses propres adresses.
+     * (Absent jusqu'ici : n'importe quel client authentifié pouvait agir
+     * sur l'adresse d'un autre client en devinant son ID.)
+     */
+    private void verifyOwner(Address address) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User user = userRepository.findByEmail(auth.getName())
+            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        if (!address.getUser().getId().equals(user.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Vous n'avez pas accès à cette adresse"
+            );
         }
-        throw new ResourceNotFoundException("Address not found");
     }
 }
