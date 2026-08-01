@@ -1,13 +1,11 @@
 package com.biterush.api.service;
 
 import com.biterush.api.dto.*;
-import com.biterush.api.entity.Client;
 import com.biterush.api.entity.DeliveryPerson;
 import com.biterush.api.entity.Restaurant;
 import com.biterush.api.entity.RestaurantStaff;
 import com.biterush.api.entity.Role;
 import com.biterush.api.entity.User;
-import com.biterush.api.repository.ClientRepository;
 import com.biterush.api.repository.DeliveryPersonRepository;
 import com.biterush.api.repository.RestaurantRepository;
 import com.biterush.api.repository.RestaurantStaffRepository;
@@ -18,9 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
@@ -32,7 +33,6 @@ import java.util.Base64;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final ClientRepository clientRepository;
     private final DeliveryPersonRepository deliveryPersonRepository;
     private final RestaurantStaffRepository restaurantStaffRepository;
     private final RestaurantRepository restaurantRepository;
@@ -40,7 +40,6 @@ public class AuthService {
     private final JwtService jwtService;
 
     public AuthService(UserRepository userRepository,
-                       ClientRepository clientRepository,
                        DeliveryPersonRepository deliveryPersonRepository,
                        RestaurantStaffRepository restaurantStaffRepository,
                        RestaurantRepository restaurantRepository,
@@ -48,7 +47,6 @@ public class AuthService {
                        JwtService jwtService) {
 
         this.userRepository = userRepository;
-        this.clientRepository = clientRepository;
         this.deliveryPersonRepository = deliveryPersonRepository;
         this.restaurantStaffRepository = restaurantStaffRepository;
         this.restaurantRepository = restaurantRepository;
@@ -56,7 +54,26 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
+    @Transactional
     public UserResponseDTO register(RegisterRequestDTO dto) {
+
+        // Sécurité : la création d'un compte ADMIN via /auth/register (permitAll)
+        // est réservée aux administrateurs déjà connectés (token JWT). Un visiteur
+        // non authentifié (ou un CLIENT/LIVREUR/STAFF) reçoit 403. La parade côté
+        // frontend (RegisterPage) avait déjà retiré l'option ADMIN du formulaire
+        // public ; cette garde protège aussi les appels directs à l'API.
+        if (dto.role == Role.ADMIN) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            boolean isAdmin = auth != null && auth.isAuthenticated()
+                    && auth.getAuthorities().stream()
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+            if (!isAdmin) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "La création d'un compte ADMIN est réservée aux administrateurs connectés"
+                );
+            }
+        }
 
         if(dto.role == Role.CLIENT && (dto.address == null || dto.address.isBlank())){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Address required");
@@ -69,14 +86,15 @@ public class AuthService {
         user.setEmail(dto.email);
         user.setPassword(passwordEncoder.encode(dto.password));
         user.setRole(dto.role);
-        User saved = userRepository.save(user);
-        if(dto.role == Role.CLIENT){
-
-            Client client = new Client();
-            client.setUser(user);
-            client.setAddress(dto.address);
-            clientRepository.save(client);
+        // CLIENT : l'adresse est persistée sur la ligne `users` elle-même (colonne
+        // `address`, ajoutée à l'entité User). L'entité `Client` est une vue
+        // @MapsId de CETTE MÊME table — appeler clientRepository.save() faisait
+        // un INSERT en double (même PK) → 500 systématique à l'inscription, et
+        // aucun profil n'était jamais créé (bug bloquant, cf. CHANGELOG).
+        if (dto.role == Role.CLIENT) {
+            user.setAddress(dto.address);
         }
+        User saved = userRepository.save(user);
 
         if(dto.role == Role.LIVREUR){
             if(dto.vehicule.isBlank() || dto.zone.isBlank()){

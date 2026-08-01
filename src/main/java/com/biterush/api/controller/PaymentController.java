@@ -23,12 +23,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/payments")
 @RequiredArgsConstructor
-@CrossOrigin(
-        origins = {
-                "http://localhost:4200",
-                "http://localhost:3000"
-        }
-)
+// Même correctif que OrderController : 4200/3000 ne correspondent à aucun
+// frontend de ce projet et écrasaient la config CORS globale (5173).
 public class PaymentController {
 
     private final PaymentService paymentService;

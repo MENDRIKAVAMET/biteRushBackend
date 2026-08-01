@@ -1,8 +1,10 @@
 package com.biterush.api.controller;
 
 import com.biterush.api.dto.MenuItemDTO;
+import com.biterush.api.entity.MenuCategory;
 import com.biterush.api.entity.MenuItem;
 import com.biterush.api.entity.Restaurant;
+import com.biterush.api.repository.MenuCategoryRepository;
 import com.biterush.api.repository.MenuItemRepository;
 import com.biterush.api.repository.RestaurantRepository;
 import jakarta.validation.Valid;
@@ -23,6 +25,7 @@ public class MenuController {
 
     private final MenuItemRepository menuItemRepository;
     private final RestaurantRepository restaurantRepository;
+    private final MenuCategoryRepository menuCategoryRepository;
 
     @GetMapping
     public ResponseEntity<List<MenuItem>> getAllMenuItems() {
@@ -44,12 +47,27 @@ public class MenuController {
         item.setDescription(dto.description);
         item.setPrice(dto.price);
         item.setStock(dto.stock);
+        if (dto.available != null) {
+            item.setAvailable(dto.available);
+        }
         item.setCategory(dto.category);
 
+        Restaurant restaurant = null;
         if (dto.restaurantId != null) {
-            Restaurant restaurant = restaurantRepository.findById(dto.restaurantId)
+            restaurant = restaurantRepository.findById(dto.restaurantId)
                 .orElseThrow(() -> new RuntimeException("Restaurant not found"));
             item.setRestaurant(restaurant);
+        }
+
+        if (dto.categoryId != null) {
+            MenuCategory menuCategory = menuCategoryRepository.findById(dto.categoryId)
+                .orElseThrow(() -> new RuntimeException("Catégorie introuvable"));
+
+            if (restaurant != null && !menuCategory.getRestaurant().getId().equals(restaurant.getId())) {
+                throw new RuntimeException("Cette catégorie n'appartient pas à ce restaurant");
+            }
+
+            item.setMenuCategory(menuCategory);
         }
 
         MenuItem saved = menuItemRepository.save(item);
@@ -68,7 +86,24 @@ public class MenuController {
                 item.setDescription(dto.description);
                 item.setPrice(dto.price);
                 item.setStock(dto.stock);
+                if (dto.available != null) {
+                    item.setAvailable(dto.available);
+                }
                 item.setCategory(dto.category);
+
+                if (dto.categoryId != null) {
+                    MenuCategory menuCategory = menuCategoryRepository.findById(dto.categoryId)
+                        .orElseThrow(() -> new RuntimeException("Catégorie introuvable"));
+
+                    if (!menuCategory.getRestaurant().getId().equals(item.getRestaurant().getId())) {
+                        throw new RuntimeException("Cette catégorie n'appartient pas à ce restaurant");
+                    }
+
+                    item.setMenuCategory(menuCategory);
+                } else {
+                    item.setMenuCategory(null);
+                }
+
                 return ResponseEntity.ok(menuItemRepository.save(item));
             })
             .orElseGet(() -> ResponseEntity.notFound().build());

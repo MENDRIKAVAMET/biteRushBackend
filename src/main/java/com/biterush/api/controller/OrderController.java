@@ -20,12 +20,12 @@ import java.util.List;
 @RestController
 @RequestMapping("/orders")
 @RequiredArgsConstructor
-@CrossOrigin(
-        origins = {
-                "http://localhost:4200",
-                "http://localhost:3000"
-        }
-)
+// Les ports 4200 (Angular)/3000 (CRA) ne correspondent à aucun frontend de ce
+// projet (Vite, port 5173) et une annotation @CrossOrigin de contrôleur
+// remplace la config CORS globale (CorsOrigin, qui autorise bien 5173) pour
+// ce contrôleur précis — /orders/** était donc bloqué par CORS depuis le
+// vrai frontend. Retrait de l'annotation pour retomber sur la config globale,
+// comme le reste des contrôleurs.
 public class OrderController {
 
     private final OrderService orderService;
@@ -47,7 +47,7 @@ public class OrderController {
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponseDTO> getOrderById(
             @PathVariable Long id,
-            @RequestParam String token
+            @RequestParam(required = false) String token
     ) {
 
         OrderResponseDTO response =
@@ -61,7 +61,7 @@ public class OrderController {
     @PatchMapping("/{id}/cancel")
     public ResponseEntity<Void> cancelOrder(
             @PathVariable Long id,
-            @RequestParam String token
+            @RequestParam(required = false) String token
     ) {
 
         businessSecurity.verifyOrderOwner(orderService.getOrderEntity(id));

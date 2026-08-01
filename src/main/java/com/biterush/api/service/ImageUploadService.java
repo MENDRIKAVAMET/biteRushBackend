@@ -23,8 +23,11 @@ public class ImageUploadService {
     
     private final ImageRepository imageRepository;
     
-    // Supported entity types
-    private static final List<String> SUPPORTED_ENTITIES = List.of("product", "restaurant", "user");
+    // "product" est un reliquat de l'ancienne route /products/** qui n'existe plus
+    // dans aucun contrôleur du projet — conservé pour ne pas casser d'éventuelles
+    // données déjà existantes en base, mais plus rien ne l'utilise réellement.
+    // "menuitem" ajouté pour permettre les images des articles de menu.
+    private static final List<String> SUPPORTED_ENTITIES = List.of("product", "restaurant", "user", "menuitem");
     
     // Supported MIME types
     private static final List<String> SUPPORTED_MIME_TYPES = List.of(

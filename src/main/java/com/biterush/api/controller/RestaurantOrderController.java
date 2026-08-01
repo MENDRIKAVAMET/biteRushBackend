@@ -3,6 +3,7 @@ package com.biterush.api.controller;
 import com.biterush.api.dto.RestaurantDashboardDTO;
 import com.biterush.api.dto.OrderResponseDTO;
 import com.biterush.api.dto.DeliveryResponseDTO;
+import com.biterush.api.dto.DeliveryPersonProfileDTO;
 import com.biterush.api.service.RestaurantService;
 
 import lombok.RequiredArgsConstructor;
@@ -74,6 +75,16 @@ public class RestaurantOrderController {
         restaurantService.markOrderReady(id);
 
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/delivery-persons")
+    public ResponseEntity<List<DeliveryPersonProfileDTO>> getDeliveryPersons(
+            @RequestParam(defaultValue = "false") boolean availableOnly) {
+
+        List<DeliveryPersonProfileDTO> response =
+                restaurantService.getDeliveryPersons(availableOnly);
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/{id}/assign-delivery")

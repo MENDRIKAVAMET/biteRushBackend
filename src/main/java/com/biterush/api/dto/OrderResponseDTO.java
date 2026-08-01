@@ -16,4 +16,5 @@ public class OrderResponseDTO {
     public OrderStatus status;
     public LocalDateTime createAt;
     public List<OrderItemResponseDTO> items;
+    public String cancelToken;
 }

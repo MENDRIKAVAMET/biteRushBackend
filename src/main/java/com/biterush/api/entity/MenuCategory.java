@@ -1,18 +1,19 @@
 package com.biterush.api.entity;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "menu_items")
-public class MenuItem {
+@Table(name = "menu_categories")
+public class MenuCategory {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -21,23 +22,6 @@ public class MenuItem {
     private String name;
 
     private String description;
-
-    @Column(nullable = false)
-    private Double price;
-
-    @Column(nullable = false)
-    private Integer stock = 0;
-
-    private String category;
-
-    @ManyToOne
-    @JoinColumn(name = "menu_category_id")
-    private MenuCategory menuCategory;
-
-    private String imageUrl;
-
-    @Column(nullable = false)
-    private boolean available = true;
 
     @ManyToOne
     @JoinColumn(name = "restaurant_id", nullable = false)

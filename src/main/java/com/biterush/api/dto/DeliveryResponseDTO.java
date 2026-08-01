@@ -11,6 +11,8 @@ public class DeliveryResponseDTO {
     public Long orderId;
     public String clientName;
     public String address;
+    public String orderPhone;
+    public double orderTotal;
 
     public Long livreurId;
     public String livreurName;

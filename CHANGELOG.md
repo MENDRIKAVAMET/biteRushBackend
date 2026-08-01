@@ -1,4 +1,246 @@
-# CHANGELOG — session du 01/08/2026 (suite 6) — backend uniquement
+# CHANGELOG — session du 01/08/2026 (suite 11) — backend uniquement
+
+## 🔴 Bug bloquant corrigé : `/auth/register` renvoyait 500 et ne créait AUCUN profil
+
+### Cause racine (diagnostic fait au fil de l'eau, 4 pages frontend en échec)
+- **CLIENT** : l'entité `Client` est mappée `@Table(name="users")` avec `@MapsId`
+  sur `User` → le profil client EST la ligne `users` elle-même. `register()`
+  appelait quand même `clientRepository.save(client)` : INSERT en double sur la
+  même PK → `500 Internal Server Error` systématique à l'inscription.
+- **LIVREUR / RESTAURANT_STAFF** : `register()` n'était pas `@Transactional` ;
+  le `User` créé devenait détaché avant le `save()` du profil `@MapsId`
+  (DeliveryPerson/RestaurantStaff) → échec de l'insertion du profil.
+- **Conséquence** : tables `delivery_persons` et `restaurant_staff` vides,
+  profils introuvables (404) sur « profil livreur », « profil resto »,
+  « catégories » et « articles » → toasts « Impossible de charger… » partout.
+
+### Corrections (`AuthService.java` + `User.java`)
+- `register()` est maintenant `@Transactional` (insertion user + profil atomique).
+- CLIENT : l'adresse est persistée sur la ligne `users` (champ `address` ajouté
+  à l'entité `User` — la colonne existait déjà en base) ; plus aucun appel à
+  `clientRepository.save()` (suppression de la dépendance, doublon d'INSERT).
+- `ClientService` reste compatible : `clientRepository.findById(userId)` lit
+  toujours la ligne `users` (vue `@MapsId`) → profil client fonctionnel.
+
+## 🛡️ Sécurité : `User` ne sérialise plus `password` / tokens / `orders` (`@JsonIgnore`)
+- `GET /admin/users` renvoyait les entités `User` brutes → `password` en clair
+  dans la réponse ET `orders` (lazy, hors session) → 500 « Impossible de charger
+  les utilisateurs » sur la page admin. `@JsonIgnore` ajouté sur `password`,
+  `resetPasswordToken`, `resetPasswordTokenExpiry` et `orders`.
+- Effet de bord positif : la sérialisation des entités `User` (admin, staff…)
+  ne risque plus de récursion infinie user→orders→user.
+
+## Important
+Compilation : `mvn -o compile` à confirmer en fin de session.
+
+### 🐛 Découvert en vérifiant les pages menu : sérialisation des entités `Restaurant`
+`GET /menu-items/restaurant/{id}/menu`, `POST /menu-items`,
+`/restaurants/{id}/menu-categories` (POST) renvoyaient 500 une fois des données
+présentes : `MenuItem`/`MenuCategory` imbriquent `restaurant`, dont les
+collections lazy `menuItems`/`orders` éclataient hors session
+(`LazyInitializationException`). `@JsonIgnore` ajouté sur ces deux collections
+(`Restaurant.java`) — l'objet `restaurant` imbriqué reste sérialisé (id,
+name…), le frontend en a besoin.
+
+---
+
+# CHANGELOG — session du 01/08/2026 (suite 10) — backend uniquement
+
+## Filtre et tri sur la liste des livreurs (`/restaurant/orders/delivery-persons`)
+- `DeliveryService.getAllDeliveryPersons(availableOnly)` : la liste est
+  maintenant **triée par zone puis par nom** (insensible à la casse, zones
+  null traitées comme chaîne vide), et un paramètre `availableOnly` filtre
+  pour ne garder que les livreurs ayant déclaré `available=true`.
+- `RestaurantService.getDeliveryPersons(availableOnly)` relaye le paramètre.
+- `RestaurantOrderController` : `GET .../delivery-persons?availableOnly=true`
+  (défaut `false` → liste complète, comportement antérieur préservé).
+- Le frontend exploite le filtre via une case « Disponibles uniquement » dans
+  la modale d'assignation (voir CHANGELOG frontend suite 5).
+
+## Important
+Compilation : `mvn -o compile` à confirmer en fin de session.
+
+---
+
+# CHANGELOG — session du 01/08/2026 (suite 9) — backend uniquement
+
+## Les 3 « À FAIRE » documentés en suite 3/4 corrigés
+
+### 1. 🔐 `/auth/register` refuse la création d'un compte ADMIN par un non-admin (`AuthService.java`)
+`register()` rejette désormais `role == ADMIN` (403) tant que l'appelant n'est
+pas un ADMIN **authentifié** (token JWT dont les authorities contiennent
+`ROLE_ADMIN`). Le frontend `RegisterPage` avait déjà retiré l'option ADMIN du
+formulaire public ; cette garde protège aussi les appels directs à l'API. La
+création de comptes ADMIN par un admin connecté (page Gestion des utilisateurs,
+qui passe par `/auth/register` avec le token) reste possible : le `JwtFilter`
+peuple `SecurityContextHolder` même sur une route `permitAll`, donc le garde
+fonctionne.
+
+### 2. ✅ `MenuItem.available` est maintenant persisté (`MenuController.java` + `MenuItemDTO.java`)
+`createMenuItem` et `updateMenuItem` copient `dto.available` vers l'entité
+(le champ existait dans `MenuItemDTO` et l'entité, mais n'était jamais appliqué
+— le toggle « Activer/Désactiver » du frontend répondait 200 sans effet en base).
+Champ passé en `Boolean` **nullable** dans `MenuItemDTO` : un PUT partiel sans
+`available` conserve la valeur existante (garde `if (dto.available != null)`),
+autant éviter qu'un client API tiers désactive silencieusement un article en
+omettant le champ (un `boolean` primitif aurait pris la valeur par défaut `false`).
+
+### 3. 🆕 Liste des livreurs accessible au staff restaurant
+- `DeliveryService.getAllDeliveryPersons()` : liste brute de tous les livreurs
+  en `DeliveryPersonProfileDTO` (id, userId, nom, email, zone, vehicule, available).
+- `RestaurantService.getDeliveryPersons()` : relais vers `DeliveryService`.
+- `RestaurantOrderController` : `GET /restaurant/orders/delivery-persons`
+  (déjà couvert par la règle SecurityConfig `/restaurant/orders/**` →
+  RESTAURANT_STAFF + ADMIN, aucune règle à ajouter).
+- Le frontend alimente sa modale d'assignation avec cette route (avant :
+  `/admin/deliveries/persons`, ADMIN uniquement → le staff saisissait l'ID à la main).
+
+## Important
+Compilation : voir section « Important » ci-dessous selon l'accès Maven.
+
+---
+
+# CHANGELOG — session du 01/08/2026 (suite 8) — backend uniquement
+
+## Fait et vérifié dans le code
+
+### Images de menu items — débloqué côté backend
+`ImageController`/`ImageUploadService` existaient déjà (upload Base64,
+5 Mo max, JPEG/PNG/GIF/WEBP/SVG, gestion d'image "primaire") mais étaient
+**inutilisables pour les menu items** :
+- `ImageUploadService.SUPPORTED_ENTITIES` n'incluait que `product`
+  (route morte, ne correspond à aucun contrôleur), `restaurant`, `user` —
+  tout upload avec `entityType=menuitem` échouait en 400 "Unsupported entity
+  type". Ajouté `menuitem` à la liste.
+- `/api/images/**` n'avait **aucune règle** dans `SecurityConfig` (retombait
+  sur `anyRequest().authenticated()`) → une photo de plat, censée être
+  publique, était bloquée pour un visiteur non connecté. Ajouté : `GET`
+  public, écritures réservées `ADMIN`/`RESTAURANT_STAFF`.
+- 🔴 **Aucun contrôle d'appartenance restaurant** sur les écritures
+  (`POST`/`PUT primary`/`DELETE`) — un `RESTAURANT_STAFF` pouvait manipuler
+  les images de n'importe quel autre restaurant en devinant l'ID du menu
+  item. Ajouté `verifyMenuItemOwnershipIfApplicable()` dans
+  `ImageController` (même patron que `MenuCategoryController`, dupliqué
+  localement pour rester cohérent avec le style déjà en place). Ne
+  s'applique qu'à `entityType=menuitem` — les entités `restaurant`/`user`
+  gardent leur comportement d'origine (aucun contrôle d'appartenance ajouté
+  pour elles cette session, signalé ci-dessous).
+
+## 🆕 Points découverts, non traités cette session
+
+- `restaurant`/`user` (les deux autres `entityType` déjà supportés) n'ont
+  **toujours aucun contrôle d'appartenance** sur `/api/images/**` — un
+  ADMIN/RESTAURANT_STAFF authentifié peut changer la photo de n'importe quel
+  restaurant, ou n'importe quel utilisateur peut manipuler la photo de
+  profil d'un autre. Pas traité ici pour rester sur la question posée
+  (images de menu), à corriger si souhaité.
+- `MenuItem.imageUrl` (simple `String`, URL) et le nouveau système
+  `Image`/Base64 sont **deux mécanismes complètement déconnectés** : uploader
+  une image via `/api/images/menuitem/{id}` ne renseigne PAS
+  automatiquement `MenuItem.imageUrl`. Le frontend devra soit continuer à
+  utiliser `imageUrl` (lien externe), soit interroger
+  `GET /api/images/menuitem/{id}/primary` pour récupérer le Base64 — décision
+  de conception à prendre avec vous, pas tranchée ici.
+- **Le frontend n'appelle actuellement `/api/images/**` nulle part** —
+  `MenuItemsPage.tsx` n'a qu'un champ texte `imageUrl`. Aucune UI d'upload
+  n'a été ajoutée cette session (backend débloqué, câblage frontend pas
+  encore fait).
+
+## Important
+Pas d'accès Maven Central dans ce sandbox. Changements relus manuellement sur
+les 3 fichiers touchés : `ImageUploadService.java`, `ImageController.java`,
+`SecurityConfig.java`. **Non compilé**.
+
+---
+
+
+
+## Fait et vérifié dans le code
+
+### Nouvelle ressource : MenuCategory
+Le frontend (`MenuCategoriesPage.tsx`, `MenuItemsPage.tsx`) appelait déjà
+`GET/POST /restaurants/{restaurantId}/menu-categories` et
+`PUT/DELETE /restaurants/{restaurantId}/menu-categories/{categoryId}` — sans
+qu'aucun contrôleur backend n'existe (404 systématique, feature entièrement
+bloquée côté client malgré un câblage frontend complet).
+
+Ajouts :
+- `entity/MenuCategory.java` (id, name, description, restaurant)
+- `repository/MenuCategoryRepository.java` (`findByRestaurant_Id`)
+- `dto/MenuCategoryDTO.java` (name obligatoire, description optionnelle)
+- `controller/MenuCategoryController.java` : CRUD complet sous
+  `/restaurants/{restaurantId}/menu-categories`, scopé au restaurant du staff
+  connecté (même patron que `RestaurantService.getCurrentStaffRestaurantId()` /
+  `HistoryController`, dupliqué localement pour rester cohérent avec le style
+  déjà en place — pas de classe utilitaire partagée existante pour ce genre de
+  vérification restaurant-scoped). ADMIN passe sans restriction de restaurant.
+- Suppression d'une catégorie : les `MenuItem` qui la référencent ne sont **pas**
+  supprimés en cascade — ils repassent à `menuCategory = null` ("non
+  catégorisé") plutôt que d'échouer sur une contrainte FK ou de disparaître
+  silencieusement. Décision de conception faute de spécification explicite sur
+  ce cas.
+
+### `MenuItem` relié à `MenuCategory` (nouveau champ optionnel)
+- `entity/MenuItem.java` : ajout de `menuCategory` (`@ManyToOne`, optionnel).
+  L'ancien champ `category` (texte libre) est **conservé tel quel** pour ne pas
+  casser les items déjà créés ni les endpoints existants
+  (`GET /menu-items/category/{category}`).
+- `dto/MenuItemDTO.java` : ajout de `categoryId` (optionnel). **Changement
+  cassant corrigé** : `category` n'est plus `@NotBlank` — le frontend
+  (`MenuItemsPage.tsx`) envoie désormais `categoryId`, pas `category`, sur
+  `POST`/`PUT /menu-items` ; garder l'ancienne contrainte aurait fait échouer
+  toute création/édition d'item avec 400 "La catégorie est obligatoire" malgré
+  un formulaire correctement rempli côté frontend.
+- `repository/MenuItemRepository.java` : ajout de `findByMenuCategory_Id`
+  (utilisé pour le "décatégorisage" en cascade ci-dessus).
+- `controller/MenuController.java` : `createMenuItem`/`updateMenuItem`
+  résolvent `categoryId` en entité et vérifient que la catégorie appartient
+  bien au même restaurant que l'item (sinon 500 explicite plutôt qu'une
+  incohérence silencieuse — pas encore de `ResponseStatusException` propre à
+  ce contrôleur, qui utilise `RuntimeException` partout ailleurs ; resté
+  cohérent avec le style existant du fichier plutôt que d'introduire un
+  pattern différent dans la même classe).
+
+### 🔴 Faille découverte et corrigée : `/restaurants/**` et `/menu-items/**` non protégés
+`SecurityConfig` ne contenait qu'une règle obsolète pour `/products/**`, un
+chemin qui ne correspond à AUCUN contrôleur du projet (les vraies routes sont
+`/restaurants/**` et `/menu-items/**`). Conséquence : ces routes retombaient
+sur `anyRequest().authenticated()` — **la page d'accueil et la carte d'un
+restaurant, censées être consultables sans compte, renvoyaient 401 à tout
+visiteur non connecté.**
+
+Corrigé : règle obsolète remplacée par des règles explicites sur les vraies
+routes (`GET` public, écritures réservées à `ADMIN`/`RESTAURANT_STAFF` selon
+le contrôleur — cohérent avec les `@PreAuthorize` déjà en place, qui restent
+la protection de fond ; ces règles HTTP ajoutent une couche de défense
+supplémentaire). Règle spécifique `/restaurants/*/menu-categories/**` (jamais
+publique) déclarée **avant** la règle générique `/restaurants/**`, sans quoi
+elle n'aurait jamais été atteinte (Spring Security retient le premier
+`requestMatcher` qui matche).
+
+## Toujours en attente (non traité cette session, priorité décroissante)
+
+- Email (confirmation commande, changement de statut) — reset mot de passe
+  déjà mocké, `spring-boot-starter-mail` toujours absent du `pom.xml`
+- Tests d'intégration : toujours pas ajoutés
+- **Frontend** : aucune modification nécessaire cette session (le câblage
+  `categoryId`/`menu-categories` existait déjà côté client, confirmé en
+  lisant `api.ts`/`types/api.ts`/`MenuCategoriesPage.tsx`/`MenuItemsPage.tsx`
+  avant d'écrire le moindre code backend)
+
+## Important
+Toujours pas d'accès Maven Central dans ce sandbox. Changements relus
+manuellement (accolades/imports vérifiés) sur les 8 fichiers touchés/créés :
+`MenuCategory.java`, `MenuCategoryRepository.java`, `MenuCategoryDTO.java`,
+`MenuCategoryController.java`, `MenuItem.java`, `MenuItemDTO.java`,
+`MenuItemRepository.java`, `MenuController.java`, `SecurityConfig.java`.
+**Non compilé** — `./mvnw compile` à lancer de votre côté, en particulier pour
+confirmer que Hibernate crée bien la table `menu_categories` et la colonne
+`menu_category_id` sur `menu_items` au démarrage (`ddl-auto=update`).
+
+---
+
+
 
 ⚠️ **Remarque sur le zip reçu en entrée** : une seule copie propre à la racine, sans
 dossier imbriqué, pas de frontend. Conforme.

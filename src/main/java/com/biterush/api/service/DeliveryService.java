@@ -237,6 +237,38 @@ public class DeliveryService {
                 ));
     }
 
+    /*
+     * =====================================================
+     * LISTE DES LIVREURS (RESTAURANT_STAFF + ADMIN)
+     * =====================================================
+     * Liste des livreurs (id, nom, zone, vehicule, available), triée par zone
+     * puis par nom — exposée au staff restaurant via
+     * /restaurant/orders/delivery-persons pour alimenter la modale d'assignation
+     * (auparavant réservée ADMIN via /admin/deliveries/persons, d'où la saisie
+     * manuelle de l'ID côté frontend).
+     *
+     * @param availableOnly si true, ne renvoie que les livreurs ayant déclaré
+     *                      available=true (filtre optionnel — par défaut on
+     *                      renvoie tout le monde, le frontend marque visuellement
+     *                      les indisponibles).
+     */
+    public java.util.List<com.biterush.api.dto.DeliveryPersonProfileDTO> getAllDeliveryPersons(
+            boolean availableOnly) {
+        return deliveryPersonRepository.findAll().stream()
+                .map(this::mapToProfileResponse)
+                .filter(dto -> !availableOnly || dto.available)
+                .sorted(
+                        java.util.Comparator
+                                .comparing(
+                                        (com.biterush.api.dto.DeliveryPersonProfileDTO d) ->
+                                                d.zone == null ? "" : d.zone,
+                                        String.CASE_INSENSITIVE_ORDER)
+                                .thenComparing(
+                                        d -> d.nom == null ? "" : d.nom,
+                                        String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
     private com.biterush.api.dto.DeliveryPersonProfileDTO mapToProfileResponse(
             com.biterush.api.entity.DeliveryPerson person) {
 
@@ -434,6 +466,8 @@ public class DeliveryService {
         dto.orderId = delivery.getOrder().getId();
         dto.clientName = delivery.getOrder().getClientName();
         dto.address = delivery.getOrder().getAddress();
+        dto.orderPhone = delivery.getOrder().getPhone();
+        dto.orderTotal = delivery.getOrder().getTotal();
 
         dto.livreurId = delivery.getLivreur().getId();
         dto.livreurName = delivery.getLivreur().getNom();

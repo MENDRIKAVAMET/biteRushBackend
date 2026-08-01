@@ -104,7 +104,14 @@ public class OrderService {
 
         Order order = getOrderById(id);
 
-        validateCancelToken(order, token);
+        // Le token n'est nécessaire que pour un accès "invité" (lien par email,
+        // sans session). Un utilisateur authentifié est déjà filtré par
+        // BusinessSecurityUtil.verifyOrderAccess() côté contrôleur — lui imposer
+        // aussi un token qu'il n'a jamais reçu bloquait systématiquement l'accès
+        // au détail de sa propre commande.
+        if (token != null && !token.isBlank()) {
+            validateCancelToken(order, token);
+        }
 
         return mapToResponse(order);
     }
@@ -232,7 +239,13 @@ public class OrderService {
 
         Order order = getOrderById(id);
 
-        validateCancelToken(order, token);
+        // Même logique que findByIdWithToken : le contrôleur vérifie déjà la
+        // propriété de la commande via BusinessSecurityUtil.verifyOrderOwner()
+        // pour un utilisateur authentifié. Le token ne sert que pour un
+        // éventuel flux invité (lien de commande sans compte).
+        if (token != null && !token.isBlank()) {
+            validateCancelToken(order, token);
+        }
 
         if (!CANCELLABLE_STATUSES.contains(order.getStatus())) {
 
@@ -628,6 +641,8 @@ public class OrderService {
                 .stream()
                 .map(this::mapItemToResponse)
                 .toList();
+
+        dto.cancelToken = order.getCancelToken();
 
         return dto;
     }

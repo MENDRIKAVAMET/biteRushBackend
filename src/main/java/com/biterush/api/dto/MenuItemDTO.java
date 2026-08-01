@@ -30,10 +30,23 @@ public class MenuItemDTO {
     @Min(value = 0, message = "Le stock ne peut pas être négatif")
     public Integer stock;
 
-    @NotBlank(message = "La catégorie est obligatoire")
+    /**
+     * Legacy : catégorie en texte libre, conservée pour compatibilité.
+     * Plus obligatoire depuis l'ajout de la vraie ressource MenuCategory
+     * (voir categoryId) — le frontend envoie désormais categoryId.
+     */
     public String category;
+
+    /**
+     * Référence vers une MenuCategory du même restaurant. Optionnel pour ne
+     * pas casser les items existants créés avant cette fonctionnalité.
+     */
+    public Long categoryId;
 
     public String imageUrl;
     public Long restaurantId;
-    public boolean available;
+    // Boolean nullable : permet de distinguer "champ absent" (on conserve la
+    // valeur existante en base) de available=false (désactivation explicite).
+    // Évite qu'un PUT partiel sans ce champ désactive silencieusement l'article.
+    public Boolean available;
 }

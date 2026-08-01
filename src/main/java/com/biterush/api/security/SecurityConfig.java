@@ -39,10 +39,44 @@ public class SecurityConfig {
                         .requestMatchers("/auth/change-password").authenticated()
                         .requestMatchers("/auth/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/products/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/products/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/products/**").hasRole("ADMIN")
+                        // /products/** ne correspond à AUCUN contrôleur du projet (les vraies
+                        // routes sont /restaurants/** et /menu-items/**, voir RestaurantController
+                        // et MenuController) — cette règle ne matchait donc jamais rien. Résultat :
+                        // GET /restaurants/** et GET /menu-items/** retombaient sur
+                        // anyRequest().authenticated(), qui exige une connexion. Or ce sont les
+                        // routes de consultation publique du menu (page d'accueil, carte d'un
+                        // restaurant) — le frontend les appelle sans authentification et se
+                        // prenait un 401 systématique. Remplacé par les vraies routes ci-dessous.
+                        //
+                        // Les opérations d'écriture restent protégées par @PreAuthorize au niveau
+                        // méthode (ADMIN et/ou RESTAURANT_STAFF selon le contrôleur) — les règles
+                        // ci-dessous ajoutent une couche de défense au niveau HTTP en plus, sur le
+                        // même principe que ce que faisait déjà l'ancienne règle /products/**.
+                        // /restaurants/{id}/menu-categories/** est un sous-chemin de /restaurants/**
+                        // : cette règle plus spécifique doit être déclarée AVANT pour primer
+                        // (Spring Security retient le premier requestMatcher qui matche). Gestion
+                        // complète (staff de son propre restaurant, ou admin) — jamais publique,
+                        // contrairement à la lecture du menu elle-même.
+                        .requestMatchers("/restaurants/*/menu-categories/**").hasAnyRole("RESTAURANT_STAFF", "ADMIN")
+
+                        .requestMatchers(HttpMethod.GET, "/restaurants/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/restaurants/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/restaurants/**").hasAnyRole("ADMIN", "RESTAURANT_STAFF")
+                        .requestMatchers(HttpMethod.DELETE, "/restaurants/**").hasRole("ADMIN")
+
+                        .requestMatchers(HttpMethod.GET, "/menu-items/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/menu-items/**").hasAnyRole("ADMIN", "RESTAURANT_STAFF")
+                        .requestMatchers(HttpMethod.PUT, "/menu-items/**").hasAnyRole("ADMIN", "RESTAURANT_STAFF")
+                        .requestMatchers(HttpMethod.DELETE, "/menu-items/**").hasAnyRole("ADMIN", "RESTAURANT_STAFF")
+
+                        // /api/images/** n'avait aucune règle explicite jusqu'ici (retombait sur
+                        // anyRequest().authenticated(), donc GET bloqué pour un visiteur non connecté
+                        // alors que ce sont des photos de plats destinées à être publiques). Écriture
+                        // protégée au niveau HTTP en plus des @PreAuthorize déjà en place sur
+                        // ImageController ; le contrôle d'appartenance restaurant (pour les images de
+                        // menu items) reste fait dans ImageController.verifyMenuItemOwnershipIfApplicable().
+                        .requestMatchers(HttpMethod.GET, "/api/images/**").permitAll()
+                        .requestMatchers("/api/images/**").hasAnyRole("ADMIN", "RESTAURANT_STAFF")
 
                         .requestMatchers(HttpMethod.POST, "/orders").hasRole("CLIENT")
 

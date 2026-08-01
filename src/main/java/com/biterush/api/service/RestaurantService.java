@@ -33,6 +33,20 @@ public class RestaurantService {
 
     /*
      * =========================================================
+     * LISTE DES LIVREURS (pour la modale d'assignation)
+     * =========================================================
+     * Délègue à DeliveryService : liste des livreurs (DeliveryPersonProfileDTO),
+     * triée par zone puis nom, sans scoping restaurant — un restaurant n'a pas
+     * besoin de limiter les livreurs qu'il peut assigner. Le filtre optionnel
+     * availableOnly (défaut false) ne garde que les livreurs disponibles.
+     */
+    public java.util.List<com.biterush.api.dto.DeliveryPersonProfileDTO> getDeliveryPersons(
+            boolean availableOnly) {
+        return deliveryService.getAllDeliveryPersons(availableOnly);
+    }
+
+    /*
+     * =========================================================
      * DASHBOARD (scoped au restaurant du staff connecté ; ADMIN voit tout)
      * =========================================================
      */
